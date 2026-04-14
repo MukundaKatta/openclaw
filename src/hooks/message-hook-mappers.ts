@@ -307,6 +307,12 @@ export function toPluginMessageSentEvent(
     content: canonical.content,
     success: canonical.success,
     ...(canonical.error ? { error: canonical.error } : {}),
+    // Surface the native channel message ID to plugins so they can correlate
+    // bot-sent messages with later reactions, edits, or audit records
+    // (#66729). It is already present on `canonical` (via
+    // `toInternalMessageSentContext`) — only the plugin-facing version was
+    // filtering it out.
+    ...(canonical.messageId !== undefined ? { messageId: canonical.messageId } : {}),
   };
 }
 

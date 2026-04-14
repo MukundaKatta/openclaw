@@ -54,4 +54,10 @@ export type PluginHookMessageSentEvent = {
   content: string;
   success: boolean;
   error?: string;
+  /**
+   * Native message ID returned by the channel adapter after the message was
+   * sent (e.g. WhatsApp/Telegram/Discord). Optional because not every adapter
+   * provides one, and failed sends may not have a messageId at all.
+   */
+  messageId?: string;
 };

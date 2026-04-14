@@ -251,6 +251,7 @@ describe("message hook mappers", () => {
       content: "reply",
       success: false,
       error: "network error",
+      messageId: "out-1",
     });
     expect(toInternalMessageSentContext(canonical)).toEqual({
       to: "demo-chat:chat:456",
@@ -263,6 +264,42 @@ describe("message hook mappers", () => {
       messageId: "out-1",
       isGroup: true,
       groupId: "demo-chat:chat:456",
+    });
+  });
+
+  // Regression: plugins need `messageId` on the sent event so they can track
+  // the bot's own outgoing messages by their native channel id (#66729).
+  it("omits messageId from the plugin sent event when the adapter did not provide one", () => {
+    const canonical = buildCanonicalSentMessageHookContext({
+      to: "demo-chat:chat:456",
+      content: "reply",
+      success: true,
+      channelId: "demo-chat",
+    });
+
+    const event = toPluginMessageSentEvent(canonical);
+    expect(event).toEqual({
+      to: "demo-chat:chat:456",
+      content: "reply",
+      success: true,
+    });
+    expect("messageId" in event).toBe(false);
+  });
+
+  it("surfaces messageId on the plugin sent event when the adapter provided one", () => {
+    const canonical = buildCanonicalSentMessageHookContext({
+      to: "demo-chat:chat:456",
+      content: "reply",
+      success: true,
+      channelId: "demo-chat",
+      messageId: "adapter-msg-42",
+    });
+
+    expect(toPluginMessageSentEvent(canonical)).toEqual({
+      to: "demo-chat:chat:456",
+      content: "reply",
+      success: true,
+      messageId: "adapter-msg-42",
     });
   });
 });
