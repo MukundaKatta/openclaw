@@ -60,6 +60,24 @@ fi
 
 git add -- "${files[@]}"
 
+# Run `pnpm check` in a way that works both with a globally installed `pnpm`
+# shim and with Corepack-managed pnpm. The repo pins pnpm via the
+# `packageManager` field in package.json, so a Corepack-only clone (no bare
+# `pnpm` on PATH) is a supported contributor setup.
+run_pnpm_check() {
+  if command -v pnpm >/dev/null 2>&1; then
+    pnpm check
+  elif command -v corepack >/dev/null 2>&1; then
+    # `corepack pnpm ...` proxies to the version pinned in packageManager
+    # without needing a pre-existing shim on PATH.
+    corepack pnpm check
+  else
+    echo "pre-commit: neither 'pnpm' nor 'corepack' is available on PATH." >&2
+    echo "pre-commit: install pnpm (https://pnpm.io/installation) or enable Corepack ('corepack enable')." >&2
+    return 1
+  fi
+}
+
 # This hook is also exercised from lightweight temp repos in tests, where the
 # staged-file safety behavior matters but the full OpenClaw workspace does not
 # exist. Only run the repo-wide validation gate inside a real checkout.
@@ -73,7 +91,7 @@ if [[ -f "$ROOT_DIR/package.json" ]] && [[ -f "$ROOT_DIR/pnpm-lock.yaml" ]]; the
       if [[ "$docs_only" == true ]]; then
         echo "Docs-only staged changes detected: skipping pnpm check in pre-commit hook."
       else
-        pnpm check
+        run_pnpm_check
       fi
       ;;
   esac
