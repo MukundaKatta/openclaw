@@ -662,6 +662,13 @@ export function resolveProviderRequestPolicyConfig(
     tls: resolveTlsOverride(params.request?.tls),
     policy,
     capabilities,
+    // Fix for #66691: callers like `transcribeOpenAiCompatibleAudio` and
+    // `transcribeDeepgramAudio` don't pass `allowPrivateNetwork` explicitly;
+    // they pass it inside `params.request`, expecting the merged model-
+    // provider request overrides to be honored here. The previous code
+    // ignored `params.request?.allowPrivateNetwork`, so operator-trusted
+    // private-network endpoints were silently SSRF-blocked for audio
+    // transcription.
     allowPrivateNetwork: params.allowPrivateNetwork ?? params.request?.allowPrivateNetwork ?? false,
   };
 }

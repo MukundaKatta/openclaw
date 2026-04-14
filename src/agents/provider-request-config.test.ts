@@ -533,4 +533,40 @@ describe("provider request config", () => {
       "X-Custom": "1",
     });
   });
+
+  // Regression: callers like audio transcription pass `allowPrivateNetwork`
+  // inside `request`, not as the top-level `allowPrivateNetwork` field.
+  // Previously that was silently dropped, causing SSRF blocks on
+  // operator-trusted LAN STT endpoints (#66691).
+  describe("allowPrivateNetwork precedence (#66691)", () => {
+    it("honors request.allowPrivateNetwork when the top-level flag is unset", () => {
+      const resolved = resolveProviderRequestPolicyConfig({
+        provider: "custom-stt",
+        api: "openai-responses",
+        baseUrl: "http://192.168.1.10:5092/v1",
+        request: { allowPrivateNetwork: true },
+      });
+      expect(resolved.allowPrivateNetwork).toBe(true);
+    });
+
+    it("prefers the explicit top-level allowPrivateNetwork over request.allowPrivateNetwork", () => {
+      const resolved = resolveProviderRequestPolicyConfig({
+        provider: "custom-stt",
+        api: "openai-responses",
+        baseUrl: "http://192.168.1.10:5092/v1",
+        allowPrivateNetwork: false,
+        request: { allowPrivateNetwork: true },
+      });
+      expect(resolved.allowPrivateNetwork).toBe(false);
+    });
+
+    it("defaults to false when neither flag is set", () => {
+      const resolved = resolveProviderRequestPolicyConfig({
+        provider: "openai",
+        api: "openai-responses",
+        baseUrl: "https://api.openai.com/v1",
+      });
+      expect(resolved.allowPrivateNetwork).toBe(false);
+    });
+  });
 });

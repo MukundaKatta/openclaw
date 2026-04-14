@@ -430,6 +430,15 @@ async function resolveProviderExecutionContext(params: {
     ...sanitizeProviderHeaders(params.entry.headers as Record<string, unknown> | undefined),
   };
   const headers = Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined;
+  // Regression fix for #66691: the previous implementation merged only
+  // the tool-level config and entry request via the base
+  // `mergeProviderRequestOverrides` + `sanitizeConfiguredProviderRequest`
+  // helpers, which explicitly drop `allowPrivateNetwork`. That silently
+  // discarded `models.providers.<id>.request.allowPrivateNetwork: true`,
+  // so self-hosted LAN STT endpoints (Parakeet, etc.) were SSRF-blocked
+  // even though operators had trusted them. Use the model-provider
+  // variants so the flag flows through, and include the provider-level
+  // request as the lowest-precedence layer.
   const request = mergeModelProviderRequestOverrides(
     sanitizeConfiguredModelProviderRequest(providerConfig?.request),
     sanitizeConfiguredProviderRequest(params.config?.request),
