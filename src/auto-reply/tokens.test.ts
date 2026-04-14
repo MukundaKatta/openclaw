@@ -45,6 +45,46 @@ describe("isSilentReplyText", () => {
     expect(isSilentReplyText("HEARTBEAT_OK", "HEARTBEAT_OK")).toBe(true);
     expect(isSilentReplyText("Checked inbox. HEARTBEAT_OK", "HEARTBEAT_OK")).toBe(false);
   });
+
+  describe("reasoning-wrapped silent replies (#66701)", () => {
+    it("detects silent reply wrapped in a bare 'think' reasoning preamble", () => {
+      const text = [
+        "think",
+        "Cav is talking about a follow-up conversation with someone else.",
+        "I will stay quiet here.NO_REPLY",
+      ].join("\n");
+      expect(isSilentReplyText(text)).toBe(true);
+    });
+
+    it("detects silent reply wrapped in <think>...</think> tags", () => {
+      const text = "<think>Internal reasoning here.</think>\nNO_REPLY";
+      expect(isSilentReplyText(text)).toBe(true);
+    });
+
+    it("detects silent reply with <think> attributes", () => {
+      const text = '<think type="internal">Reasoning</think> NO_REPLY';
+      expect(isSilentReplyText(text)).toBe(true);
+    });
+
+    it("detects silent token at end even when glued to punctuation after reasoning", () => {
+      const text = "think\nReasoning lines.\nFinal thought.NO_REPLY";
+      expect(isSilentReplyText(text)).toBe(true);
+    });
+
+    it("does not treat substantive replies that happen to contain 'think' as silent (#19537)", () => {
+      // No leading reasoning marker -> still not silent.
+      expect(isSilentReplyText("I think this is a helpful response.\n\nNO_REPLY")).toBe(false);
+    });
+
+    it("does not match when 'think' is part of a word, not a reasoning marker", () => {
+      expect(isSilentReplyText("thinking about it. NO_REPLY")).toBe(false);
+    });
+
+    it("works with custom token", () => {
+      const text = "<think>Reasoning</think> HEARTBEAT_OK";
+      expect(isSilentReplyText(text, "HEARTBEAT_OK")).toBe(true);
+    });
+  });
 });
 
 describe("stripSilentToken", () => {
