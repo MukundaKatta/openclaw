@@ -114,6 +114,39 @@ describe("isSilentReplyText", () => {
       const text = "<think>Just thinking, nothing to say.</think>\nNO_REPLY";
       expect(isSilentReplyText(text)).toBe(true);
     });
+
+    // Codex P1 re-review on PR #66755: in bare-think form without a
+    // blank-line separator, we cannot safely distinguish trailing
+    // reasoning from a substantive reply that the model happened to
+    // suffix with NO_REPLY on its own line. Only classify as silent in
+    // this form when the token is GLUED to its preceding text (the
+    // specific #66701 shape). If the token sits on its own line, be
+    // conservative and return false.
+    it("does NOT classify as silent when bare-think ends with token alone on a line (no blank-line separator)", () => {
+      const text = [
+        "think",
+        "Reasoning about the request.",
+        "Here is the answer for the user.",
+        "NO_REPLY",
+      ].join("\n");
+      expect(isSilentReplyText(text)).toBe(false);
+    });
+
+    // Codex P2 re-review on PR #66755: an unclosed <think> tag (common
+    // during streaming) where the body ends with the trailing token
+    // should still be treated as silent — otherwise the reasoning
+    // wrapper leaks when the model truncates before emitting </think>.
+    it("classifies unclosed <think> block as silent when body ends with token", () => {
+      const text = "<think>Reasoning lines without a close tag. NO_REPLY";
+      expect(isSilentReplyText(text)).toBe(true);
+    });
+
+    it("does NOT classify unclosed <think> as silent when non-empty content follows token", () => {
+      // A streamed block that happens to contain NO_REPLY mid-body
+      // with user-facing text after it is NOT silent.
+      const text = "<think>Reasoning NO_REPLY here is the answer";
+      expect(isSilentReplyText(text)).toBe(false);
+    });
   });
 });
 

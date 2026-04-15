@@ -79,19 +79,30 @@ function isReasoningWrappedSilentReply(text: string, token: string): boolean {
   }
   const trailRegex = getSilentReasoningTrailRegex(token);
 
-  // Tagged form: <think ...>...</think>. Tolerate an unclosed tag
-  // (some models truncate it when streaming) by treating the body as
-  // running to end-of-string when no closing tag is present.
-  const tagged = trimmed.match(/^<think\b[^>]*>([\s\S]*?)(<\/think>|$)/i);
-  if (tagged) {
-    const afterTag = trimmed.slice(tagged[0].length).trim();
+  // Tagged form: <think ...>...</think>. Handle the closed and unclosed
+  // cases separately:
+  //   - Closed: the trailing token must follow </think>. Anything else
+  //     between the close tag and the token is user-facing.
+  //   - Unclosed (streaming truncation): the trailing token lives
+  //     inside the still-open reasoning region; only classify silent
+  //     when the body ends with the token and there is no content
+  //     after it.
+  const taggedClosed = trimmed.match(/^<think\b[^>]*>([\s\S]*?)<\/think>/i);
+  if (taggedClosed) {
+    const afterTag = trimmed.slice(taggedClosed[0].length).trim();
     if (!trailRegex.test(afterTag)) {
       return false;
     }
-    // Whatever lives between </think> and the trailing token is
-    // user-facing; only classify silent when it's empty.
     const remainderAfterToken = afterTag.replace(trailRegex, "").trim();
     return remainderAfterToken === "";
+  }
+  const taggedOpenOnly = trimmed.match(/^<think\b[^>]*>/i);
+  if (taggedOpenOnly) {
+    const body = trimmed.slice(taggedOpenOnly[0].length);
+    // Token is inside an unclosed reasoning block (streaming
+    // truncation). Everything from <think> onward is reasoning, so
+    // classify silent iff the body ends with the trailing token.
+    return trailRegex.test(body);
   }
 
   // Bare form: a literal "think" line followed by reasoning lines.
@@ -109,11 +120,26 @@ function isReasoningWrappedSilentReply(text: string, token: string): boolean {
       const remainderAfterToken = tailRegion.replace(trailRegex, "").trim();
       return remainderAfterToken === "";
     }
-    // No blank-line separator: by convention the entire post-marker
-    // block is one continuous reasoning region (the original issue
-    // shape — the model's last reasoning line is something like
-    // "I will stay quiet here.NO_REPLY"). Treat as silent.
-    return true;
+    // No blank-line separator: the reasoning/output boundary is
+    // ambiguous. Only classify as silent when the trailing token is
+    // GLUED to its preceding text on the last line — that's the
+    // specific #66701 shape (model forgot the newline before the
+    // token). If the token sits alone on its own line, we can't tell
+    // reasoning from a substantive reply, so be conservative and
+    // return false (Codex P1 review on PR #66755).
+    const trailMatch = afterMarker.match(trailRegex);
+    if (!trailMatch) {
+      return false;
+    }
+    const charBeforeToken = afterMarker.slice(
+      0,
+      trailMatch.index ?? afterMarker.length,
+    );
+    // "Glued" = the last line before the token is non-empty after the
+    // leading reasoning region. i.e. there's no trailing `\n` right
+    // before the token.
+    const gluedToPrecedingText = !/\r?\n\s*$/.test(charBeforeToken);
+    return gluedToPrecedingText;
   }
 
   return false;
